@@ -142,21 +142,43 @@
         return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
     }
 
+    // Ikoner baserat på filändelse (stöd för DWG, PDF, Excel, Word, mm)
     function getFileIcon(filename) {
         const ext = filename.split('.').pop().toLowerCase();
-        if (ext === 'pdf') return 'fa-file-pdf';
-        if (['jpg','jpeg','png','gif','webp','bmp','svg'].includes(ext)) return 'fa-file-image';
-        if (['mp4','webm','mov','avi'].includes(ext)) return 'fa-file-video';
-        if (['zip','rar','7z'].includes(ext)) return 'fa-file-archive';
-        if (['dwg','dxf'].includes(ext)) return 'fa-draw-polygon';
-        if (['doc','docx'].includes(ext)) return 'fa-file-word';
-        if (['xls','xlsx','csv'].includes(ext)) return 'fa-file-excel';
-        return 'fa-file';
+        switch (ext) {
+            case 'pdf': return 'fa-file-pdf';
+            case 'dwg': return 'fa-draw-polygon';
+            case 'dxf': return 'fa-draw-polygon';
+            case 'jpg': case 'jpeg': case 'png': case 'gif': case 'webp': case 'bmp': case 'svg':
+                return 'fa-file-image';
+            case 'mp4': case 'webm': case 'mov': case 'avi':
+                return 'fa-file-video';
+            case 'zip': case 'rar': case '7z':
+                return 'fa-file-archive';
+            case 'doc': case 'docx':
+                return 'fa-file-word';
+            case 'xls': case 'xlsx': case 'csv':
+                return 'fa-file-excel';
+            case 'ppt': case 'pptx':
+                return 'fa-file-powerpoint';
+            default:
+                return 'fa-file';
+        }
     }
 
     function escapeHtml(str) {
         if (!str) return '';
         return str.replace(/[&<>]/g, m => m === '&' ? '&amp;' : m === '<' ? '&lt;' : '&gt;');
+    }
+
+    // Funktion som tvingar nedladdning med korrekt filnamn (behåller originalnamn och ändelse)
+    function downloadFile(url, filename) {
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;          // Sätter önskat filnamn
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
     }
 
     async function loadFromFirebase() {
@@ -209,7 +231,7 @@
                         </div>
                         <div class="file-actions">
                             <button class="btn btn-view" onclick="window.open('${file.previewUrl}', '_blank')"><i class="fas fa-eye"></i> Visa</button>
-                            <button class="btn btn-download" onclick="window.open('${file.downloadUrl}', '_blank')"><i class="fas fa-download"></i> Ladda ner</button>
+                            <button class="btn btn-download" onclick="downloadFile('${file.downloadUrl}', '${escapeHtml(file.filename)}')"><i class="fas fa-download"></i> Ladda ner</button>
                         </div>
                     </div>
                 `).join('')}
