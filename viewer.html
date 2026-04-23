@@ -107,8 +107,14 @@
     console.log("✅ Firebase inicializado correctamente");
     // ================================================
 
+    // 🔧 Función para sanitizar códigos para Firebase (reemplaza . por -)
+    function sanitizeCodeForFirebase(code) {
+        return code.replace(/\./g, '-').replace(/[#$\[\]]/g, '_');
+    }
+
     const urlParams = new URLSearchParams(window.location.search);
-    const code = urlParams.get('code');
+    const codeOriginal = urlParams.get('code');  // Ej: "CBB.32"
+    const codeSanitized = codeOriginal ? sanitizeCodeForFirebase(codeOriginal) : null;
 
     function showToast(msg, isError = false) {
         const toast = document.getElementById('toast');
@@ -158,9 +164,9 @@
         return str.replace(/[&<>]/g, m => m === '&' ? '&amp;' : m === '<' ? '&lt;' : '&gt;');
     }
 
-    async function loadFromFirebase(code) {
+    async function loadFromFirebase(sanitizedCode) {
         try {
-            const snapshot = await database.ref(`underlag/${code}`).once('value');
+            const snapshot = await database.ref(`underlag/${sanitizedCode}`).once('value');
             const data = snapshot.val();
             return data || null;
         } catch (error) {
@@ -170,7 +176,7 @@
     }
 
     async function init() {
-        if (!code) {
+        if (!codeOriginal) {
             document.getElementById('content').innerHTML = `
                 <div class="error">
                     <i class="fas fa-exclamation-triangle"></i>
@@ -182,16 +188,17 @@
             return;
         }
 
-        document.getElementById('codeDisplay').textContent = code;
-        console.log(`🔍 Buscando documentos para código: ${code}`);
+        document.getElementById('codeDisplay').textContent = codeOriginal;
+        console.log(`🔍 Buscando documentos para código original: ${codeOriginal}`);
+        console.log(`🔍 Buscando en Firebase con código sanitizado: ${codeSanitized}`);
         
-        const data = await loadFromFirebase(code);
+        const data = await loadFromFirebase(codeSanitized);
         
         if (!data) {
             document.getElementById('content').innerHTML = `
                 <div class="no-files">
                     <i class="fas fa-folder-open"></i>
-                    <p>No hay documentos disponibles para el código <strong>${escapeHtml(code)}</strong></p>
+                    <p>No hay documentos disponibles para el código <strong>${escapeHtml(codeOriginal)}</strong></p>
                     <p style="margin-top:0.5rem; font-size:0.85rem;">Contacta al administrador para más información.</p>
                 </div>
             `;
@@ -202,7 +209,7 @@
             document.getElementById('content').innerHTML = `
                 <div class="no-files">
                     <i class="fas fa-folder-open"></i>
-                    <p>No hay documentos disponibles para el código <strong>${escapeHtml(code)}</strong></p>
+                    <p>No hay documentos disponibles para el código <strong>${escapeHtml(codeOriginal)}</strong></p>
                 </div>
             `;
             return;
@@ -213,7 +220,7 @@
         }
 
         const filesArray = Object.values(data.files);
-        console.log(`📄 Mostrando ${filesArray.length} archivo(s) para código ${code}`);
+        console.log(`📄 Mostrando ${filesArray.length} archivo(s) para código ${codeOriginal}`);
 
         const filesHtml = `
             <div class="files-grid">
