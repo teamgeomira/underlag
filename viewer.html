@@ -41,7 +41,7 @@
             transition: transform 0.2s, box-shadow 0.2s; border: 1px solid #e2edf5;
         }
         .file-card:hover { transform: translateY(-3px); box-shadow: 0 8px 20px rgba(0,0,0,0.1); }
-        .file-icon { font-size: 2.5rem; color: #5a8eb0; margin-bottom: 0.8rem; }
+        .file-icon { font-size: 2.5rem; margin-bottom: 0.8rem; }
         .file-name { font-weight: 600; font-size: 0.9rem; word-break: break-word; margin-bottom: 0.5rem; }
         .file-meta { font-size: 0.75rem; color: #6c8dab; margin-bottom: 1rem; display: flex; gap: 1rem; flex-wrap: wrap; }
         .file-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; }
@@ -142,27 +142,26 @@
         return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
     }
 
-    // Ikoner baserat på filändelse (stöd för DWG, PDF, Excel, Word, mm)
-    function getFileIcon(filename) {
+    function getFileIconAndColor(filename) {
         const ext = filename.split('.').pop().toLowerCase();
         switch (ext) {
-            case 'pdf': return 'fa-file-pdf';
-            case 'dwg': return 'fa-draw-polygon';
-            case 'dxf': return 'fa-draw-polygon';
+            case 'pdf': return { icon: 'fa-file-pdf', color: '#e74c3c' };
+            case 'dwg': return { icon: 'fa-draw-polygon', color: '#e67e22' };
+            case 'dxf': return { icon: 'fa-draw-polygon', color: '#e67e22' };
             case 'jpg': case 'jpeg': case 'png': case 'gif': case 'webp': case 'bmp': case 'svg':
-                return 'fa-file-image';
+                return { icon: 'fa-file-image', color: '#3498db' };
             case 'mp4': case 'webm': case 'mov': case 'avi':
-                return 'fa-file-video';
+                return { icon: 'fa-file-video', color: '#9b59b6' };
             case 'zip': case 'rar': case '7z':
-                return 'fa-file-archive';
+                return { icon: 'fa-file-archive', color: '#f39c12' };
             case 'doc': case 'docx':
-                return 'fa-file-word';
+                return { icon: 'fa-file-word', color: '#2980b9' };
             case 'xls': case 'xlsx': case 'csv':
-                return 'fa-file-excel';
+                return { icon: 'fa-file-excel', color: '#27ae60' };
             case 'ppt': case 'pptx':
-                return 'fa-file-powerpoint';
+                return { icon: 'fa-file-powerpoint', color: '#e67e22' };
             default:
-                return 'fa-file';
+                return { icon: 'fa-file', color: '#5a8eb0' };
         }
     }
 
@@ -171,14 +170,27 @@
         return str.replace(/[&<>]/g, m => m === '&' ? '&amp;' : m === '<' ? '&lt;' : '&gt;');
     }
 
-    // Funktion som tvingar nedladdning med korrekt filnamn (behåller originalnamn och ändelse)
-    function downloadFile(url, filename) {
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = filename;          // Sätter önskat filnamn
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
+    // Laddar ner filen med dess ursprungliga filnamn (Behåller originalnamn + ändelse)
+    // Använder fetch + blob för att tvinga rätt filnamn oavsett Cloudinarys URL
+    async function downloadFileWithOriginalName(url, originalFilename) {
+        try {
+            showToast(`⬇️ Laddar ner ${originalFilename} ...`);
+            const response = await fetch(url);
+            if (!response.ok) throw new Error('Nedladdning misslyckades');
+            const blob = await response.blob();
+            const blobUrl = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = blobUrl;
+            a.download = originalFilename;   // Tvingar rätt filnamn
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            window.URL.revokeObjectURL(blobUrl);
+            showToast(`✅ ${originalFilename} nedladdad`);
+        } catch (error) {
+            console.error('Nedladdningsfel:', error);
+            showToast('❌ Kunde inte ladda ner filen', true);
+        }
     }
 
     async function loadFromFirebase() {
@@ -219,24 +231,25 @@
             document.getElementById('descriptionContainer').innerHTML = `<div class="description"><i class="fas fa-info-circle"></i> ${escapeHtml(data.description)}</div>`;
         }
         const filesArray = Object.values(data.files);
-        const html = `
-            <div class="files-grid">
-                ${filesArray.map(file => `
-                    <div class="file-card">
-                        <div class="file-icon"><i class="fas ${getFileIcon(file.filename)}"></i></div>
-                        <div class="file-name" title="${escapeHtml(file.filename)}">${escapeHtml(file.filename.length > 50 ? file.filename.substring(0,47)+'...' : file.filename)}</div>
-                        <div class="file-meta">
-                            <span><i class="fas fa-weight-hanging"></i> ${formatSize(file.size)}</span>
-                            <span><i class="fas fa-calendar"></i> ${new Date(file.date).toLocaleDateString('sv-SE')}</span>
-                        </div>
-                        <div class="file-actions">
-                            <button class="btn btn-view" onclick="window.open('${file.previewUrl}', '_blank')"><i class="fas fa-eye"></i> Visa</button>
-                            <button class="btn btn-download" onclick="downloadFile('${file.downloadUrl}', '${escapeHtml(file.filename)}')"><i class="fas fa-download"></i> Ladda ner</button>
-                        </div>
+        let html = `<div class="files-grid">`;
+        for (const file of filesArray) {
+            const { icon, color } = getFileIconAndColor(file.filename);
+            html += `
+                <div class="file-card">
+                    <div class="file-icon" style="color:${color};"><i class="fas ${icon} fa-2x"></i></div>
+                    <div class="file-name" title="${escapeHtml(file.filename)}">${escapeHtml(file.filename.length > 50 ? file.filename.substring(0,47)+'...' : file.filename)}</div>
+                    <div class="file-meta">
+                        <span><i class="fas fa-weight-hanging"></i> ${formatSize(file.size)}</span>
+                        <span><i class="fas fa-calendar"></i> ${new Date(file.date).toLocaleDateString('sv-SE')}</span>
                     </div>
-                `).join('')}
-            </div>
-        `;
+                    <div class="file-actions">
+                        <button class="btn btn-view" onclick="window.open('${file.previewUrl}', '_blank')"><i class="fas fa-eye"></i> Visa</button>
+                        <button class="btn btn-download" onclick="downloadFileWithOriginalName('${file.downloadUrl}', '${escapeHtml(file.filename)}')"><i class="fas fa-download"></i> Ladda ner</button>
+                    </div>
+                </div>
+            `;
+        }
+        html += `</div>`;
         document.getElementById('content').innerHTML = html;
         showToast(`📄 ${filesArray.length} dokument laddades`);
     }
