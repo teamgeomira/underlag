@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ver documentos - Underlag</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Inter', sans-serif;
+            background: linear-gradient(145deg, #eef3fc 0%, #e0e9f2 100%);
+            padding: 2rem;
+            color: #1b2f44;
+            min-height: 100vh;
+        }
+        .container { max-width: 1200px; margin: 0 auto; }
+        .header {
+            background: white; border-radius: 1.5rem; padding: 1.5rem;
+            margin-bottom: 2rem; box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+        }
+        .header h1 { font-size: 1.5rem; color: #2c7cb6; margin-bottom: 0.5rem; }
+        .code-badge {
+            background: #e67e22; color: white; padding: 0.4rem 1rem;
+            border-radius: 2rem; display: inline-block; font-family: monospace;
+            font-size: 1.2rem; font-weight: 600; margin-top: 0.5rem;
+        }
+        .description {
+            color: #4a6f8f; margin-top: 0.8rem; padding: 0.5rem;
+            background: #f0f6fc; border-radius: 0.8rem;
+        }
+        .files-grid {
+            display: grid; grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+            gap: 1.5rem;
+        }
+        .file-card {
+            background: white; border-radius: 1rem; padding: 1.2rem;
+            transition: transform 0.2s, box-shadow 0.2s; border: 1px solid #e2edf5;
+        }
+        .file-card:hover { transform: translateY(-3px); box-shadow: 0 8px 20px rgba(0,0,0,0.1); }
+        .file-icon { font-size: 2.5rem; color: #5a8eb0; margin-bottom: 0.8rem; }
+        .file-name { font-weight: 600; font-size: 0.9rem; word-break: break-word; margin-bottom: 0.5rem; color: #1b2f44; }
+        .file-meta { font-size: 0.75rem; color: #6c8dab; margin-bottom: 1rem; display: flex; gap: 1rem; flex-wrap: wrap; }
+        .file-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+        .btn {
+            padding: 0.4rem 1rem; border-radius: 2rem; border: none; cursor: pointer;
+            font-size: 0.75rem; font-weight: 500; display: inline-flex; align-items: center;
+            gap: 0.4rem; transition: 0.1s; text-decoration: none;
+        }
+        .btn-view { background: #eef3fc; color: #2c7cb6; }
+        .btn-download { background: #eef3fc; color: #10b981; }
+        .btn-copy { background: #fef3c7; color: #92400e; }
+        .btn:hover { filter: brightness(0.95); transform: scale(0.98); }
+        .loading, .error, .no-files {
+            text-align: center; padding: 3rem; background: white; border-radius: 1.5rem;
+        }
+        .loading i, .error i, .no-files i { font-size: 3rem; margin-bottom: 1rem; }
+        .loading i { color: #5a8eb0; }
+        .error i { color: #e74c3c; }
+        .no-files i { color: #f39c12; }
+        .toast {
+            position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+            background: #1a2f3e; color: white; padding: 10px 24px; border-radius: 40px;
+            font-size: 0.85rem; opacity: 0; transition: opacity 0.2s; pointer-events: none; z-index: 1000;
+        }
+        @media (max-width: 768px) { body { padding: 1rem; } .files-grid { grid-template-columns: 1fr; } }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="header" id="header">
+        <h1><i class="fas fa-folder-open"></i> Documentos adjuntos</h1>
+        <div class="code-badge" id="codeDisplay">Cargando...</div>
+        <div id="descriptionContainer"></div>
+    </div>
+
+    <div id="content">
+        <div class="loading">
+            <i class="fas fa-spinner fa-pulse"></i>
+            <p>Cargando documentos desde Cloudinary...</p>
+        </div>
+    </div>
+</div>
+
+<div id="toast" class="toast">✅ Listo</div>
+
+<script>
+    // Configuración de Cloudinary
+    const CLOUD_NAME = "dc1zqri3o";
+    const FOLDER = "underlag";
+    const MAPPING_URL = `https://res.cloudinary.com/${CLOUD_NAME}/raw/upload/v1/${FOLDER}/mapping.json`;
+
+    const urlParams = new URLSearchParams(window.location.search);
+    const code = urlParams.get('code');
+
+    function showToast(msg, isError = false) {
+        const toast = document.getElementById('toast');
+        toast.textContent = msg;
+        toast.style.backgroundColor = isError ? "#b91c2c" : "#1a2f3e";
+        toast.style.opacity = "1";
+        setTimeout(() => toast.style.opacity = "0", 2500);
+    }
+
+    async function copyToClipboard(text) {
+        try {
+            await navigator.clipboard.writeText(text);
+            showToast("📋 Enlace copiado");
+        } catch {
+            const ta = document.createElement('textarea');
+            ta.value = text;
+            document.body.appendChild(ta);
+            ta.select();
+            document.execCommand('copy');
+            document.body.removeChild(ta);
+            showToast("📋 Enlace copiado");
+        }
+    }
+
+    function formatSize(bytes) {
+        if (bytes === 0) return '0 B';
+        const k = 1024;
+        const sizes = ['B', 'KB', 'MB', 'GB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+    }
+
+    function getFileIcon(filename) {
+        const ext = filename.split('.').pop().toLowerCase();
+        if (ext === 'pdf') return 'fa-file-pdf';
+        if (['jpg','jpeg','png','gif','webp','bmp','svg'].includes(ext)) return 'fa-file-image';
+        if (['mp4','webm','mov','avi'].includes(ext)) return 'fa-file-video';
+        if (['zip','rar','7z'].includes(ext)) return 'fa-file-archive';
+        if (['dwg','dxf'].includes(ext)) return 'fa-draw-polygon';
+        if (['doc','docx'].includes(ext)) return 'fa-file-word';
+        if (['xls','xlsx','csv'].includes(ext)) return 'fa-file-excel';
+        return 'fa-file';
+    }
+
+    function escapeHtml(str) {
+        if (!str) return '';
+        return str.replace(/[&<>]/g, m => m === '&' ? '&amp;' : m === '<' ? '&lt;' : '&gt;');
+    }
+
+    async function loadMappingFromCloudinary() {
+        try {
+            const response = await fetch(MAPPING_URL);
+            if (!response.ok) {
+                if (response.status === 404) return {};
+                throw new Error('No se pudo cargar');
+            }
+            return await response.json();
+        } catch (error) {
+            console.error('Error:', error);
+            return null;
+        }
+    }
+
+    async function init() {
+        if (!code) {
+            document.getElementById('content').innerHTML = `
+                <div class="error">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    <p>No se especificó ningún código.</p>
+                    <p>El enlace debe ser: viewer.html?code=CBB.32</p>
+                </div>
+            `;
+            document.getElementById('codeDisplay').textContent = 'Sin código';
+            return;
+        }
+
+        document.getElementById('codeDisplay').textContent = code;
+        
+        const mapping = await loadMappingFromCloudinary();
+        
+        if (!mapping) {
+            document.getElementById('content').innerHTML = `
+                <div class="error">
+                    <i class="fas fa-cloud-download-alt"></i>
+                    <p>No se pudo conectar con Cloudinary. Verifica tu conexión.</p>
+                </div>
+            `;
+            return;
+        }
+
+        const data = mapping[code];
+        
+        if (!data || !data.files || data.files.length === 0) {
+            document.getElementById('content').innerHTML = `
+                <div class="no-files">
+                    <i class="fas fa-folder-open"></i>
+                    <p>No hay documentos disponibles para el código <strong>${escapeHtml(code)}</strong></p>
+                    <p style="margin-top:0.5rem; font-size:0.85rem;">Contacta al administrador para más información.</p>
+                </div>
+            `;
+            return;
+        }
+
+        if (data.description) {
+            document.getElementById('descriptionContainer').innerHTML = `<div class="description"><i class="fas fa-info-circle"></i> ${escapeHtml(data.description)}</div>`;
+        }
+
+        const filesHtml = `
+            <div class="files-grid">
+                ${data.files.map(file => `
+                    <div class="file-card">
+                        <div class="file-icon">
+                            <i class="fas ${getFileIcon(file.filename)}"></i>
+                        </div>
+                        <div class="file-name" title="${escapeHtml(file.filename)}">
+                            ${escapeHtml(file.filename.length > 50 ? file.filename.substring(0,47) + '...' : file.filename)}
+                        </div>
+                        <div class="file-meta">
+                            <span><i class="fas fa-weight-hanging"></i> ${formatSize(file.size)}</span>
+                            <span><i class="fas fa-calendar"></i> ${new Date(file.date).toLocaleDateString('es-ES')}</span>
+                        </div>
+                        <div class="file-actions">
+                            <button class="btn btn-view" onclick="window.open('${file.previewUrl}', '_blank')">
+                                <i class="fas fa-eye"></i> Ver
+                            </button>
+                            <button class="btn btn-download" onclick="window.open('${file.downloadUrl}', '_blank')">
+                                <i class="fas fa-download"></i> Descargar
+                            </button>
+                            <button class="btn btn-copy" onclick="copyToClipboard('${file.previewUrl}')">
+                                <i class="fas fa-copy"></i> Copiar enlace
+                            </button>
+                        </div>
+                    </div>
+                `).join('')}
+            </div>
+        `;
+        
+        document.getElementById('content').innerHTML = filesHtml;
+    }
+
+    init();
+</script>
+</body>
+</html>
