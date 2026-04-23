@@ -1,12 +1,11 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="sv">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Ver documentos - Underlag</title>
+    <title>Underlag – visa dokument</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
-    <!-- Firebase SDK -->
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
     <style>
@@ -43,7 +42,7 @@
         }
         .file-card:hover { transform: translateY(-3px); box-shadow: 0 8px 20px rgba(0,0,0,0.1); }
         .file-icon { font-size: 2.5rem; color: #5a8eb0; margin-bottom: 0.8rem; }
-        .file-name { font-weight: 600; font-size: 0.9rem; word-break: break-word; margin-bottom: 0.5rem; color: #1b2f44; }
+        .file-name { font-weight: 600; font-size: 0.9rem; word-break: break-word; margin-bottom: 0.5rem; }
         .file-meta { font-size: 0.75rem; color: #6c8dab; margin-bottom: 1rem; display: flex; gap: 1rem; flex-wrap: wrap; }
         .file-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; }
         .btn {
@@ -53,8 +52,6 @@
         }
         .btn-view { background: #eef3fc; color: #2c7cb6; }
         .btn-download { background: #eef3fc; color: #10b981; }
-        .btn-copy { background: #fef3c7; color: #92400e; }
-        .btn:hover { filter: brightness(0.95); transform: scale(0.98); }
         .loading, .error, .no-files {
             text-align: center; padding: 3rem; background: white; border-radius: 1.5rem;
         }
@@ -62,6 +59,20 @@
         .loading i { color: #5a8eb0; }
         .error i { color: #e74c3c; }
         .no-files i { color: #f39c12; }
+        .footer {
+            margin-top: 2rem;
+            text-align: center;
+            font-size: 0.8rem;
+            color: #6c8dab;
+            border-top: 1px solid #cbdde9;
+            padding-top: 1.5rem;
+        }
+        .footer a {
+            color: #2c7cb6;
+            text-decoration: none;
+            font-weight: 500;
+        }
+        .footer a:hover { text-decoration: underline; }
         .toast {
             position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
             background: #1a2f3e; color: white; padding: 10px 24px; border-radius: 40px;
@@ -72,24 +83,28 @@
 </head>
 <body>
 <div class="container">
-    <div class="header" id="header">
-        <h1><i class="fas fa-folder-open"></i> Documentos adjuntos</h1>
-        <div class="code-badge" id="codeDisplay">Cargando...</div>
+    <div class="header">
+        <h1><i class="fas fa-folder-open"></i> Underlag</h1>
+        <div class="code-badge" id="codeDisplay">Laddar...</div>
         <div id="descriptionContainer"></div>
     </div>
 
     <div id="content">
         <div class="loading">
             <i class="fas fa-spinner fa-pulse"></i>
-            <p>Cargando documentos desde la base de datos...</p>
+            <p>Hämtar dokument från databasen...</p>
         </div>
+    </div>
+
+    <div class="footer">
+        <i class="fas fa-chart-line"></i> Teknik från 
+        <a href="https://geomira.se/index.html" target="_blank">Geomira</a> – din partner inom GIS och digitala lösningar
     </div>
 </div>
 
-<div id="toast" class="toast">✅ Listo</div>
+<div id="toast" class="toast">✅ Klart</div>
 
 <script>
-    // ========== CONFIGURACIÓN DE FIREBASE ==========
     const firebaseConfig = {
         apiKey: "AIzaSyANa6zWkGrYQ7O7M6XT2oYbArsZIcs36M8",
         authDomain: "trip-a9341.firebaseapp.com",
@@ -100,21 +115,16 @@
         appId: "1:379336201132:web:ebeadba357d17635aba009",
         measurementId: "G-JPR9HGQTMJ"
     };
-    
-    // Inicializar Firebase
     firebase.initializeApp(firebaseConfig);
     const database = firebase.database();
-    console.log("✅ Firebase inicializado correctamente");
-    // ================================================
 
-    // 🔧 Función para sanitizar códigos para Firebase (reemplaza . por -)
-    function sanitizeCodeForFirebase(code) {
+    function sanitizeCode(code) {
         return code.replace(/\./g, '-').replace(/[#$\[\]]/g, '_');
     }
 
     const urlParams = new URLSearchParams(window.location.search);
-    const codeOriginal = urlParams.get('code');  // Ej: "CBB.32"
-    const codeSanitized = codeOriginal ? sanitizeCodeForFirebase(codeOriginal) : null;
+    const originalCode = urlParams.get('code');
+    const sanitizedCode = originalCode ? sanitizeCode(originalCode) : null;
 
     function showToast(msg, isError = false) {
         const toast = document.getElementById('toast');
@@ -122,21 +132,6 @@
         toast.style.backgroundColor = isError ? "#b91c2c" : "#1a2f3e";
         toast.style.opacity = "1";
         setTimeout(() => toast.style.opacity = "0", 2500);
-    }
-
-    async function copyToClipboard(text) {
-        try {
-            await navigator.clipboard.writeText(text);
-            showToast("📋 Enlace copiado");
-        } catch {
-            const ta = document.createElement('textarea');
-            ta.value = text;
-            document.body.appendChild(ta);
-            ta.select();
-            document.execCommand('copy');
-            document.body.removeChild(ta);
-            showToast("📋 Enlace copiado");
-        }
     }
 
     function formatSize(bytes) {
@@ -164,98 +159,65 @@
         return str.replace(/[&<>]/g, m => m === '&' ? '&amp;' : m === '<' ? '&lt;' : '&gt;');
     }
 
-    async function loadFromFirebase(sanitizedCode) {
+    async function loadFromFirebase() {
+        if (!sanitizedCode) return null;
         try {
             const snapshot = await database.ref(`underlag/${sanitizedCode}`).once('value');
-            const data = snapshot.val();
-            return data || null;
+            return snapshot.val();
         } catch (error) {
-            console.error('Error loading from Firebase:', error);
+            console.error('Fel:', error);
             return null;
         }
     }
 
     async function init() {
-        if (!codeOriginal) {
+        if (!originalCode) {
             document.getElementById('content').innerHTML = `
                 <div class="error">
                     <i class="fas fa-exclamation-triangle"></i>
-                    <p>No se especificó ningún código.</p>
-                    <p>El enlace debe ser: viewer.html?code=CBB.32</p>
+                    <p>Ingen kod angiven. Länken ska se ut så här: viewer.html?code=CBB.32</p>
                 </div>
             `;
-            document.getElementById('codeDisplay').textContent = 'Sin código';
+            document.getElementById('codeDisplay').textContent = 'Saknar kod';
             return;
         }
-
-        document.getElementById('codeDisplay').textContent = codeOriginal;
-        console.log(`🔍 Buscando documentos para código original: ${codeOriginal}`);
-        console.log(`🔍 Buscando en Firebase con código sanitizado: ${codeSanitized}`);
-        
-        const data = await loadFromFirebase(codeSanitized);
-        
-        if (!data) {
+        document.getElementById('codeDisplay').textContent = originalCode;
+        const data = await loadFromFirebase();
+        if (!data || !data.files || Object.keys(data.files).length === 0) {
             document.getElementById('content').innerHTML = `
                 <div class="no-files">
                     <i class="fas fa-folder-open"></i>
-                    <p>No hay documentos disponibles para el código <strong>${escapeHtml(codeOriginal)}</strong></p>
-                    <p style="margin-top:0.5rem; font-size:0.85rem;">Contacta al administrador para más información.</p>
+                    <p>Inga underlag hittades för koden <strong>${escapeHtml(originalCode)}</strong></p>
+                    <p style="margin-top:0.5rem;">Kontakta administratören för mer information.</p>
                 </div>
             `;
             return;
         }
-
-        if (!data.files || Object.keys(data.files).length === 0) {
-            document.getElementById('content').innerHTML = `
-                <div class="no-files">
-                    <i class="fas fa-folder-open"></i>
-                    <p>No hay documentos disponibles para el código <strong>${escapeHtml(codeOriginal)}</strong></p>
-                </div>
-            `;
-            return;
-        }
-
         if (data.description) {
             document.getElementById('descriptionContainer').innerHTML = `<div class="description"><i class="fas fa-info-circle"></i> ${escapeHtml(data.description)}</div>`;
         }
-
         const filesArray = Object.values(data.files);
-        console.log(`📄 Mostrando ${filesArray.length} archivo(s) para código ${codeOriginal}`);
-
-        const filesHtml = `
+        const html = `
             <div class="files-grid">
                 ${filesArray.map(file => `
                     <div class="file-card">
-                        <div class="file-icon">
-                            <i class="fas ${getFileIcon(file.filename)}"></i>
-                        </div>
-                        <div class="file-name" title="${escapeHtml(file.filename)}">
-                            ${escapeHtml(file.filename.length > 50 ? file.filename.substring(0,47) + '...' : file.filename)}
-                        </div>
+                        <div class="file-icon"><i class="fas ${getFileIcon(file.filename)}"></i></div>
+                        <div class="file-name" title="${escapeHtml(file.filename)}">${escapeHtml(file.filename.length > 50 ? file.filename.substring(0,47)+'...' : file.filename)}</div>
                         <div class="file-meta">
                             <span><i class="fas fa-weight-hanging"></i> ${formatSize(file.size)}</span>
-                            <span><i class="fas fa-calendar"></i> ${new Date(file.date).toLocaleDateString('es-ES')}</span>
+                            <span><i class="fas fa-calendar"></i> ${new Date(file.date).toLocaleDateString('sv-SE')}</span>
                         </div>
                         <div class="file-actions">
-                            <button class="btn btn-view" onclick="window.open('${file.previewUrl}', '_blank')">
-                                <i class="fas fa-eye"></i> Ver
-                            </button>
-                            <button class="btn btn-download" onclick="window.open('${file.downloadUrl}', '_blank')">
-                                <i class="fas fa-download"></i> Descargar
-                            </button>
-                            <button class="btn btn-copy" onclick="copyToClipboard('${file.previewUrl}')">
-                                <i class="fas fa-copy"></i> Copiar enlace
-                            </button>
+                            <button class="btn btn-view" onclick="window.open('${file.previewUrl}', '_blank')"><i class="fas fa-eye"></i> Visa</button>
+                            <button class="btn btn-download" onclick="window.open('${file.downloadUrl}', '_blank')"><i class="fas fa-download"></i> Ladda ner</button>
                         </div>
                     </div>
                 `).join('')}
             </div>
         `;
-        
-        document.getElementById('content').innerHTML = filesHtml;
-        showToast(`📄 ${filesArray.length} documento(s) cargado(s)`);
+        document.getElementById('content').innerHTML = html;
+        showToast(`📄 ${filesArray.length} dokument laddades`);
     }
-
     init();
 </script>
 </body>
