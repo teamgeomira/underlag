@@ -6,6 +6,9 @@
     <title>Admin - Subir documentos a Cloudinary</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <!-- Firebase SDK (versión compat para usar con script) -->
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -52,6 +55,11 @@
         .progress-fill { background: linear-gradient(90deg, #2c7cb6, #4ca0d0); width: 0%; height: 100%; transition: width 0.3s; }
         .result-link { background: #eef3fc; padding: 1rem; border-radius: 1rem; margin-top: 1rem; display: none; }
         .code-badge { background: #e67e22; color: white; padding: 0.3rem 0.8rem; border-radius: 2rem; font-family: monospace; font-size: 0.9rem; display: inline-block; }
+        .existing-files { margin-top: 1rem; padding-top: 1rem; border-top: 1px solid #e2edf5; }
+        .file-item-existing {
+            background: #f0f6fc; padding: 0.7rem 1rem; border-radius: 0.8rem; margin-bottom: 0.5rem;
+            display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap;
+        }
         .toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: #1a2f3e; color: white; padding: 10px 24px; border-radius: 40px; font-size: 0.85rem; opacity: 0; transition: opacity 0.2s; pointer-events: none; z-index: 1000; }
         @media (max-width: 768px) { body { padding: 1rem; } .card { padding: 1.5rem; } .file-item { flex-direction: column; align-items: flex-start; } }
     </style>
@@ -60,7 +68,7 @@
 <div class="container">
     <div class="header">
         <h1><i class="fas fa-cloud-upload-alt"></i> Admin - Subir documentos</h1>
-        <p>Sube archivos a Cloudinary y obtén enlaces para compartir</p>
+        <p>Sube archivos a Cloudinary y se guardan en Firebase</p>
     </div>
 
     <div class="card">
@@ -101,21 +109,39 @@
 
         <div id="resultContainer" class="result-link"></div>
     </div>
+
+    <div class="card" id="existingFilesCard" style="display: none;">
+        <h3><i class="fas fa-history"></i> Archivos existentes para este código</h3>
+        <div id="existingFilesList"></div>
+    </div>
 </div>
 
 <div id="toast" class="toast">✅ Listo</div>
 
 <script>
+    // ========== CONFIGURACIÓN DE FIREBASE ==========
+    const firebaseConfig = {
+        apiKey: "AIzaSyANa6zWkGrYQ7O7M6XT2oYbArsZIcs36M8",
+        authDomain: "trip-a9341.firebaseapp.com",
+        databaseURL: "https://trip-a9341-default-rtdb.firebaseio.com",
+        projectId: "trip-a9341",
+        storageBucket: "trip-a9341.firebasestorage.app",
+        messagingSenderId: "379336201132",
+        appId: "1:379336201132:web:ebeadba357d17635aba009",
+        measurementId: "G-JPR9HGQTMJ"
+    };
+    
+    // Inicializar Firebase
+    firebase.initializeApp(firebaseConfig);
+    const database = firebase.database();
+    console.log("✅ Firebase inicializado correctamente");
+    // ================================================
+
     // ========== CONFIGURACIÓN DE CLOUDINARY ==========
     const CLOUD_NAME = "dc1zqri3o";
     const UPLOAD_PRESET = "ncc_nordic";
     const FOLDER = "underlag";
-    const API_KEY = "725351489155421";
-    const API_SECRET = "22W8BZheLQtKAw7LEayY1S60Ky4";
-    
-    // URL del mapping.json en Cloudinary
-    const MAPPING_URL = `https://res.cloudinary.com/${CLOUD_NAME}/raw/upload/v1/${FOLDER}/mapping.json`;
-    // ================================================
+    // =================================================
 
     // Elementos del DOM
     const codeInput = document.getElementById('codeInput');
@@ -128,6 +154,8 @@
     const progressBar = document.getElementById('progressBar');
     const progressFill = document.getElementById('progressFill');
     const resultContainer = document.getElementById('resultContainer');
+    const existingFilesCard = document.getElementById('existingFilesCard');
+    const existingFilesList = document.getElementById('existingFilesList');
     const toast = document.getElementById('toast');
 
     let selectedFiles = [];
@@ -188,16 +216,8 @@
         return str.replace(/[&<>]/g, m => m === '&' ? '&amp;' : m === '<' ? '&lt;' : '&gt;');
     }
 
-    async function sha1(message) {
-        const msgBuffer = new TextEncoder().encode(message);
-        const hashBuffer = await crypto.subtle.digest('SHA-1', msgBuffer);
-        const hashArray = Array.from(new Uint8Array(hashBuffer));
-        const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-        return hashHex;
-    }
-
     // Subir un archivo a Cloudinary
-    async function uploadFile(file, code) {
+    async function uploadFileToCloudinary(file, code) {
         const formData = new FormData();
         const timestamp = Date.now();
         const safeName = file.name.replace(/[^a-zA-Z0-9åäöÅÄÖ.\-]/g, '_');
@@ -226,7 +246,7 @@
                 date: new Date().toISOString(),
                 previewUrl: data.secure_url,
                 downloadUrl: downloadUrl,
-                code: code
+                type: file.name.split('.').pop().toLowerCase()
             };
         } catch (err) {
             console.error(err);
@@ -234,53 +254,90 @@
         }
     }
 
-    // Subir mapping.json a Cloudinary
-    async function uploadMappingToCloudinary(mappingData) {
-        try {
-            const jsonString = JSON.stringify(mappingData, null, 2);
-            const blob = new Blob([jsonString], {type: 'application/json'});
-            const file = new File([blob], 'mapping.json', {type: 'application/json'});
-            
-            const formData = new FormData();
-            const timestamp = Date.now();
-            const publicId = `${FOLDER}/mapping`;
-            
-            formData.append('file', file);
-            formData.append('upload_preset', UPLOAD_PRESET);
-            formData.append('folder', FOLDER);
-            formData.append('public_id', publicId);
-            formData.append('resource_type', 'raw');
-            
-            const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD_NAME}/raw/upload`, {
-                method: 'POST',
-                body: formData
-            });
-            const data = await res.json();
-            if (!res.ok) throw new Error('No se pudo subir mapping.json');
-            
-            return data.secure_url;
-        } catch (err) {
-            console.error('Error:', err);
-            throw err;
-        }
+    // Guardar en Firebase
+    async function saveToFirebase(code, description, files) {
+        const codeRef = database.ref(`underlag/${code}`);
+        
+        // Obtener datos existentes
+        const snapshot = await codeRef.once('value');
+        let existingData = snapshot.val() || {};
+        
+        // Crear objeto de archivos para Firebase
+        const filesObj = {};
+        files.forEach((file, index) => {
+            const fileId = `${Date.now()}_${index}_${file.filename.replace(/[^a-zA-Z0-9]/g, '_')}`;
+            filesObj[fileId] = {
+                filename: file.filename,
+                size: file.size,
+                date: file.date,
+                previewUrl: file.previewUrl,
+                downloadUrl: file.downloadUrl,
+                type: file.type
+            };
+        });
+        
+        // Combinar archivos existentes con nuevos
+        const existingFiles = existingData.files || {};
+        const allFiles = { ...existingFiles, ...filesObj };
+        
+        // Guardar en Firebase
+        await codeRef.set({
+            description: description || existingData.description || '',
+            createdAt: existingData.createdAt || new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            files: allFiles
+        });
+        
+        console.log(`✅ Datos guardados en Firebase para código: ${code}`);
+        return true;
     }
 
-    // Cargar mapping.json desde Cloudinary
-    async function loadMappingFromCloudinary() {
+    // Cargar archivos existentes desde Firebase
+    async function loadExistingFiles(code) {
         try {
-            const response = await fetch(MAPPING_URL);
-            if (!response.ok) {
-                if (response.status === 404) return {};
-                throw new Error('No se pudo cargar mapping.json');
-            }
-            return await response.json();
+            const snapshot = await database.ref(`underlag/${code}`).once('value');
+            const data = snapshot.val();
+            return data || null;
         } catch (error) {
-            console.log('No existe mapping.json, creando uno nuevo');
-            return {};
+            console.error('Error loading from Firebase:', error);
+            return null;
         }
     }
 
-    // Función principal para subir archivos
+    async function displayExistingFiles(code) {
+        const data = await loadExistingFiles(code);
+        
+        if (!data || !data.files || Object.keys(data.files).length === 0) {
+            existingFilesCard.style.display = 'none';
+            return;
+        }
+        
+        existingFilesCard.style.display = 'block';
+        
+        let html = '';
+        if (data.description) {
+            html += `<p><strong>Descripción:</strong> ${escapeHtml(data.description)}</p>`;
+        }
+        
+        html += `<div style="margin-top: 1rem;">`;
+        const filesArray = Object.values(data.files);
+        for (const file of filesArray) {
+            html += `
+                <div class="file-item-existing">
+                    <i class="fas ${getFileIcon(file.filename)}"></i>
+                    <span class="file-name">${escapeHtml(file.filename)}</span>
+                    <span class="file-size">${formatSize(file.size)}</span>
+                    <div style="display: flex; gap: 0.3rem;">
+                        <button class="btn-secondary" style="padding: 0.2rem 0.6rem; font-size:0.7rem;" onclick="window.open('${file.previewUrl}', '_blank')"><i class="fas fa-eye"></i> Ver</button>
+                        <button class="btn-secondary" style="padding: 0.2rem 0.6rem; font-size:0.7rem;" onclick="window.open('${file.downloadUrl}', '_blank')"><i class="fas fa-download"></i> Descargar</button>
+                    </div>
+                </div>
+            `;
+        }
+        html += `</div>`;
+        existingFilesList.innerHTML = html;
+    }
+
     async function uploadFiles() {
         const code = codeInput.value.trim().toUpperCase();
         
@@ -302,13 +359,14 @@
         const total = selectedFiles.length;
         const uploadedFiles = [];
         
+        showToast(`📤 Subiendo ${total} archivo(s) a Cloudinary...`);
+        
         for (let i = 0; i < selectedFiles.length; i++) {
-            showToast(`📤 Subiendo ${i+1} de ${total}: ${selectedFiles[i].name}`);
-            const result = await uploadFile(selectedFiles[i], code);
+            const result = await uploadFileToCloudinary(selectedFiles[i], code);
             
             if (result.success) {
                 uploadedFiles.push(result);
-                showToast(`✅ ${result.filename} subido a Cloudinary`);
+                console.log(`✅ Subido: ${result.filename}`);
             } else {
                 showToast(`❌ Error: ${result.name}`, true);
             }
@@ -317,67 +375,45 @@
             progressFill.style.width = `${(completed/total)*100}%`;
         }
         
-        // Cargar mapping existente
-        const mapping = await loadMappingFromCloudinary();
-        const description = descriptionInput.value.trim();
-        
-        // Actualizar mapping con nuevos archivos
-        if (!mapping[code]) {
-            mapping[code] = {
-                description: description,
-                files: [],
-                createdAt: new Date().toISOString()
-            };
+        if (uploadedFiles.length > 0) {
+            showToast(`📝 Guardando en Firebase...`);
+            
+            // Guardar en Firebase
+            const description = descriptionInput.value.trim();
+            await saveToFirebase(code, description, uploadedFiles);
+            
+            // Generar enlace
+            const GITHUB_BASE = window.location.origin + window.location.pathname.replace(/[^/]*$/, '');
+            const ENLACE_PARA_USUARIO = `${GITHUB_BASE}viewer.html?code=${encodeURIComponent(code)}`;
+            
+            resultContainer.style.display = 'block';
+            resultContainer.innerHTML = `
+                <h4><i class="fas fa-check-circle" style="color:#10b981;"></i> ¡Archivos subidos correctamente!</h4>
+                <p>📁 ${uploadedFiles.length} archivo(s) subido(s) a Cloudinary y registrados en Firebase</p>
+                <p>📌 Código: <strong class="code-badge">${escapeHtml(code)}</strong></p>
+                
+                <hr style="margin: 1rem 0;">
+                
+                <p><strong style="color:#2c7cb6;">🔗 ENLACE PARA COPIAR EN EXCEL/PDF:</strong></p>
+                <input type="text" id="linkInput" value="${ENLACE_PARA_USUARIO}" readonly style="width:100%; padding:0.8rem; border-radius:0.8rem; border:2px solid #cbdde9; margin:0.5rem 0; font-family: monospace; font-size:0.9rem; background:#f8fafc;">
+                
+                <div style="display: flex; gap: 0.5rem; margin-top: 0.5rem; flex-wrap: wrap;">
+                    <button id="copyLinkBtn" class="btn-primary"><i class="fas fa-copy"></i> Copiar enlace</button>
+                    <a href="${ENLACE_PARA_USUARIO}" target="_blank" class="btn-secondary" style="text-decoration:none;"><i class="fas fa-external-link-alt"></i> Probar enlace</a>
+                </div>
+            `;
+            
+            document.getElementById('copyLinkBtn')?.addEventListener('click', () => {
+                const linkInput = document.getElementById('linkInput');
+                linkInput.select();
+                document.execCommand('copy');
+                showToast('📋 Enlace copiado al portapapeles');
+            });
+            
+            showToast(`✅ ${uploadedFiles.length} archivo(s) subidos correctamente`);
+        } else {
+            showToast('❌ No se pudo subir ningún archivo', true);
         }
-        
-        mapping[code].files = [...mapping[code].files, ...uploadedFiles];
-        if (description) {
-            mapping[code].description = description;
-        }
-        mapping[code].updatedAt = new Date().toISOString();
-        
-        // Subir mapping.json actualizado a Cloudinary
-        await uploadMappingToCloudinary(mapping);
-        
-        // 🔑 GENERAR EL ENLACE CORRECTO
-        // El enlace debe apuntar a viewer.html en GitHub Pages
-        // Tu GitHub Pages está en: https://teamgeomira.github.io/underlag/
-        const GITHUB_BASE = window.location.origin + window.location.pathname.replace(/[^/]*$/, '');
-        const ENLACE_PARA_USUARIO = `${GITHUB_BASE}viewer.html?code=${encodeURIComponent(code)}`;
-        
-        resultContainer.style.display = 'block';
-        resultContainer.innerHTML = `
-            <h4><i class="fas fa-check-circle" style="color:#10b981;"></i> ¡Archivos subidos correctamente!</h4>
-            <p>📁 ${uploadedFiles.length} archivo(s) subido(s) a Cloudinary para el código <strong class="code-badge">${escapeHtml(code)}</strong></p>
-            
-            <hr style="margin: 1rem 0;">
-            
-            <p><strong style="color:#2c7cb6;">🔗 ENLACE PARA COPIAR EN EXCEL/PDF:</strong></p>
-            <input type="text" id="linkInput" value="${ENLACE_PARA_USUARIO}" readonly style="width:100%; padding:0.8rem; border-radius:0.8rem; border:2px solid #cbdde9; margin:0.5rem 0; font-family: monospace; font-size:0.9rem; background:#f8fafc;">
-            
-            <div style="display: flex; gap: 0.5rem; margin-top: 0.5rem; flex-wrap: wrap;">
-                <button id="copyLinkBtn" class="btn-primary"><i class="fas fa-copy"></i> Copiar enlace</button>
-                <a href="${ENLACE_PARA_USUARIO}" target="_blank" class="btn-secondary" style="text-decoration:none;"><i class="fas fa-external-link-alt"></i> Probar enlace</a>
-            </div>
-            
-            <hr style="margin: 1rem 0;">
-            
-            <p style="font-size:0.85rem; color:#6c8dab; background:#f0f6fc; padding:0.8rem; border-radius:0.8rem;">
-                <i class="fas fa-info-circle"></i> 
-                <strong>Instrucciones:</strong><br>
-                1. Copia este enlace<br>
-                2. Pégalo en tu tabla Excel o PDF<br>
-                3. El usuario hará clic y verá los archivos desde Cloudinary<br>
-                4. Los archivos se almacenan en la nube, no en GitHub
-            </p>
-        `;
-        
-        document.getElementById('copyLinkBtn')?.addEventListener('click', () => {
-            const linkInput = document.getElementById('linkInput');
-            linkInput.select();
-            document.execCommand('copy');
-            showToast('📋 Enlace copiado al portapapeles');
-        });
         
         // Limpiar selección de archivos
         selectedFiles = [];
@@ -397,7 +433,21 @@
         showToast('🧹 Lista limpiada');
     }
 
-    // Event listeners
+    // Cargar archivos existentes al escribir el código
+    let debounceTimer;
+    codeInput.addEventListener('input', async (e) => {
+        clearTimeout(debounceTimer);
+        const code = e.target.value.trim().toUpperCase();
+        if (code.length >= 3) {
+            debounceTimer = setTimeout(async () => {
+                await displayExistingFiles(code);
+            }, 500);
+        } else {
+            existingFilesCard.style.display = 'none';
+        }
+    });
+
+    // Event listeners del dropzone
     dropzone.addEventListener('dragover', e => {
         e.preventDefault();
         dropzone.classList.add('drag-over');
@@ -431,6 +481,7 @@
     
     // Inicializar
     renderFileList();
+    console.log("✅ Admin panel listo - Firebase conectado");
 </script>
 </body>
 </html>
