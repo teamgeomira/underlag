@@ -6,7 +6,7 @@
     <title>Admin - Subir documentos a Cloudinary</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
-    <!-- Firebase SDK (versión compat para usar con script) -->
+    <!-- Firebase SDK -->
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
     <style>
@@ -61,6 +61,7 @@
             display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap;
         }
         .toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: #1a2f3e; color: white; padding: 10px 24px; border-radius: 40px; font-size: 0.85rem; opacity: 0; transition: opacity 0.2s; pointer-events: none; z-index: 1000; }
+        .warning-badge { background: #fef3c7; color: #92400e; padding: 0.2rem 0.5rem; border-radius: 1rem; font-size: 0.7rem; margin-left: 0.5rem; }
         @media (max-width: 768px) { body { padding: 1rem; } .card { padding: 1.5rem; } .file-item { flex-direction: column; align-items: flex-start; } }
     </style>
 </head>
@@ -75,7 +76,7 @@
         <div class="form-group">
             <label><i class="fas fa-tag"></i> Código (ej: CBB.32, BBB.111)</label>
             <input type="text" id="codeInput" placeholder="Ejemplo: CBB.32" autocomplete="off">
-            <small style="color:#6c8dab;">Este código se usará en el enlace: viewer.html?code=CBB.32</small>
+            <small style="color:#6c8dab;">Usa el código original con puntos (ej: CBB.32). Internamente se guarda como CBB-32</small>
         </div>
 
         <div class="form-group">
@@ -142,6 +143,16 @@
     const UPLOAD_PRESET = "ncc_nordic";
     const FOLDER = "underlag";
     // =================================================
+
+    // 🔧 Función para sanitizar códigos para Firebase (reemplaza . por -)
+    function sanitizeCodeForFirebase(code) {
+        return code.replace(/\./g, '-').replace(/[#$\[\]]/g, '_');
+    }
+
+    // Función para mostrar el código original (con puntos)
+    function displayOriginalCode(sanitizedCode) {
+        return sanitizedCode.replace(/-/g, '.');
+    }
 
     // Elementos del DOM
     const codeInput = document.getElementById('codeInput');
@@ -217,15 +228,16 @@
     }
 
     // Subir un archivo a Cloudinary
-    async function uploadFileToCloudinary(file, code) {
+    async function uploadFileToCloudinary(file, codeOriginal) {
         const formData = new FormData();
         const timestamp = Date.now();
         const safeName = file.name.replace(/[^a-zA-Z0-9åäöÅÄÖ.\-]/g, '_');
-        const publicId = `${FOLDER}/${code}/${timestamp}_${safeName}`;
+        // Usamos el código original para la carpeta en Cloudinary (con puntos)
+        const publicId = `${FOLDER}/${codeOriginal}/${timestamp}_${safeName}`;
         
         formData.append('file', file);
         formData.append('upload_preset', UPLOAD_PRESET);
-        formData.append('folder', `${FOLDER}/${code}`);
+        formData.append('folder', `${FOLDER}/${codeOriginal}`);
         formData.append('public_id', publicId);
         formData.append('resource_type', 'auto');
 
@@ -254,9 +266,10 @@
         }
     }
 
-    // Guardar en Firebase
-    async function saveToFirebase(code, description, files) {
-        const codeRef = database.ref(`underlag/${code}`);
+    // Guardar en Firebase (usando código sanitizado)
+    async function saveToFirebase(codeOriginal, description, files) {
+        const codeSanitized = sanitizeCodeForFirebase(codeOriginal);
+        const codeRef = database.ref(`underlag/${codeSanitized}`);
         
         // Obtener datos existentes
         const snapshot = await codeRef.once('value');
@@ -272,7 +285,8 @@
                 date: file.date,
                 previewUrl: file.previewUrl,
                 downloadUrl: file.downloadUrl,
-                type: file.type
+                type: file.type,
+                originalCode: codeOriginal  // Guardamos el código original
             };
         });
         
@@ -283,19 +297,21 @@
         // Guardar en Firebase
         await codeRef.set({
             description: description || existingData.description || '',
+            originalCode: codeOriginal,
             createdAt: existingData.createdAt || new Date().toISOString(),
             updatedAt: new Date().toISOString(),
             files: allFiles
         });
         
-        console.log(`✅ Datos guardados en Firebase para código: ${code}`);
+        console.log(`✅ Datos guardados en Firebase para código: ${codeOriginal} -> ${codeSanitized}`);
         return true;
     }
 
     // Cargar archivos existentes desde Firebase
-    async function loadExistingFiles(code) {
+    async function loadExistingFiles(codeOriginal) {
         try {
-            const snapshot = await database.ref(`underlag/${code}`).once('value');
+            const codeSanitized = sanitizeCodeForFirebase(codeOriginal);
+            const snapshot = await database.ref(`underlag/${codeSanitized}`).once('value');
             const data = snapshot.val();
             return data || null;
         } catch (error) {
@@ -304,8 +320,8 @@
         }
     }
 
-    async function displayExistingFiles(code) {
-        const data = await loadExistingFiles(code);
+    async function displayExistingFiles(codeOriginal) {
+        const data = await loadExistingFiles(codeOriginal);
         
         if (!data || !data.files || Object.keys(data.files).length === 0) {
             existingFilesCard.style.display = 'none';
@@ -339,9 +355,9 @@
     }
 
     async function uploadFiles() {
-        const code = codeInput.value.trim().toUpperCase();
+        const codeOriginal = codeInput.value.trim().toUpperCase();
         
-        if (!code) {
+        if (!codeOriginal) {
             showToast('❌ Ingresa un código (ej: CBB.32)', true);
             return;
         }
@@ -362,7 +378,7 @@
         showToast(`📤 Subiendo ${total} archivo(s) a Cloudinary...`);
         
         for (let i = 0; i < selectedFiles.length; i++) {
-            const result = await uploadFileToCloudinary(selectedFiles[i], code);
+            const result = await uploadFileToCloudinary(selectedFiles[i], codeOriginal);
             
             if (result.success) {
                 uploadedFiles.push(result);
@@ -380,17 +396,18 @@
             
             // Guardar en Firebase
             const description = descriptionInput.value.trim();
-            await saveToFirebase(code, description, uploadedFiles);
+            await saveToFirebase(codeOriginal, description, uploadedFiles);
             
-            // Generar enlace
+            // Generar enlace - el enlace usa el código original (con puntos)
             const GITHUB_BASE = window.location.origin + window.location.pathname.replace(/[^/]*$/, '');
-            const ENLACE_PARA_USUARIO = `${GITHUB_BASE}viewer.html?code=${encodeURIComponent(code)}`;
+            const ENLACE_PARA_USUARIO = `${GITHUB_BASE}viewer.html?code=${encodeURIComponent(codeOriginal)}`;
             
             resultContainer.style.display = 'block';
             resultContainer.innerHTML = `
                 <h4><i class="fas fa-check-circle" style="color:#10b981;"></i> ¡Archivos subidos correctamente!</h4>
                 <p>📁 ${uploadedFiles.length} archivo(s) subido(s) a Cloudinary y registrados en Firebase</p>
-                <p>📌 Código: <strong class="code-badge">${escapeHtml(code)}</strong></p>
+                <p>📌 Código original: <strong class="code-badge">${escapeHtml(codeOriginal)}</strong></p>
+                <p>📌 Código interno: <strong>${escapeHtml(sanitizeCodeForFirebase(codeOriginal))}</strong> <span class="warning-badge"><i class="fas fa-info-circle"></i> Los puntos se convierten a guiones para Firebase</span></p>
                 
                 <hr style="margin: 1rem 0;">
                 
@@ -437,10 +454,10 @@
     let debounceTimer;
     codeInput.addEventListener('input', async (e) => {
         clearTimeout(debounceTimer);
-        const code = e.target.value.trim().toUpperCase();
-        if (code.length >= 3) {
+        const codeOriginal = e.target.value.trim().toUpperCase();
+        if (codeOriginal.length >= 3) {
             debounceTimer = setTimeout(async () => {
-                await displayExistingFiles(code);
+                await displayExistingFiles(codeOriginal);
             }, 500);
         } else {
             existingFilesCard.style.display = 'none';
@@ -482,6 +499,7 @@
     // Inicializar
     renderFileList();
     console.log("✅ Admin panel listo - Firebase conectado");
+    console.log("📌 Los códigos con puntos se convierten automáticamente a guiones para Firebase");
 </script>
 </body>
 </html>
