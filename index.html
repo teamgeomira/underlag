@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="sv">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AdminV - Subir documentos a Cloudinary</title>
+    <title>Ladda upp underlag</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
     <!-- Firebase SDK -->
@@ -55,11 +55,6 @@
         .progress-fill { background: linear-gradient(90deg, #2c7cb6, #4ca0d0); width: 0%; height: 100%; transition: width 0.3s; }
         .result-link { background: #eef3fc; padding: 1rem; border-radius: 1rem; margin-top: 1rem; display: none; }
         .code-badge { background: #e67e22; color: white; padding: 0.3rem 0.8rem; border-radius: 2rem; font-family: monospace; font-size: 0.9rem; display: inline-block; }
-        .existing-files { margin-top: 1rem; padding-top: 1rem; border-top: 1px solid #e2edf5; }
-        .file-item-existing {
-            background: #f0f6fc; padding: 0.7rem 1rem; border-radius: 0.8rem; margin-bottom: 0.5rem;
-            display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap;
-        }
         .toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: #1a2f3e; color: white; padding: 10px 24px; border-radius: 40px; font-size: 0.85rem; opacity: 0; transition: opacity 0.2s; pointer-events: none; z-index: 1000; }
         .warning-badge { background: #fef3c7; color: #92400e; padding: 0.2rem 0.5rem; border-radius: 1rem; font-size: 0.7rem; margin-left: 0.5rem; }
         @media (max-width: 768px) { body { padding: 1rem; } .card { padding: 1.5rem; } .file-item { flex-direction: column; align-items: flex-start; } }
@@ -68,30 +63,30 @@
 <body>
 <div class="container">
     <div class="header">
-        <h1><i class="fas fa-cloud-upload-alt"></i> Admin - Subir documentos</h1>
-        <p>Sube archivos a Cloudinary y obtén enlaces para Excel/PDF</p>
+        <h1><i class="fas fa-cloud-upload-alt"></i>Ladda upp underlag</h1>
+        <p>Ladda upp filer till molnet och få en länk att klistra in i Excel/PDF</p>
     </div>
 
     <div class="card">
         <div class="form-group">
-            <label><i class="fas fa-tag"></i> Código (ej: CBB.32, BBB.111)</label>
-            <input type="text" id="codeInput" placeholder="Ejemplo: CBB.32" autocomplete="off">
-            <small style="color:#6c8dab;">Usa el código original con puntos (ej: CBB.32). Internamente se guarda como CBB-32</small>
+            <label><i class="fas fa-tag"></i> Kod (t.ex. CBB.32, BBB.111)</label>
+            <input type="text" id="codeInput" placeholder="Exempel: CBB.32" autocomplete="off">
+            <small style="color:#6c8dab;">Använd koden med punkt (CBB.32). Internt konverteras punkten till bindestreck för databasen.</small>
         </div>
 
         <div class="form-group">
-            <label><i class="fas fa-file-alt"></i> Descripción (opcional)</label>
-            <input type="text" id="descriptionInput" placeholder="¿Qué contienen estos archivos?">
+            <label><i class="fas fa-file-alt"></i> Beskrivning (valfritt)</label>
+            <input type="text" id="descriptionInput" placeholder="Vad innehåller filerna?">
         </div>
 
         <div class="form-group">
-            <label><i class="fas fa-paperclip"></i> Selecciona archivos</label>
+            <label><i class="fas fa-paperclip"></i> Välj filer</label>
             <div class="dropzone" id="dropzone">
                 <i class="fas fa-cloud-upload-alt"></i>
-                <p>Arrastra y suelta archivos aquí</p>
-                <small>Todos los formatos: PDF, DWG, ZIP, JPG, PNG, MP4, DOCX, XLSX</small>
+                <p>Dra och släpp filer hit</p>
+                <small>Alla format stöds: PDF, DWG, ZIP, JPG, PNG, MP4, DOCX, XLSX</small>
                 <div class="btn-secondary" style="display: inline-block; margin-top: 10px; padding: 0.5rem 1rem;">
-                    <i class="fas fa-folder-open"></i> Seleccionar archivos
+                    <i class="fas fa-folder-open"></i> Välj filer
                 </div>
             </div>
             <input type="file" id="fileInput" multiple style="display:none">
@@ -104,23 +99,23 @@
         </div>
 
         <div style="display: flex; gap: 1rem; flex-wrap: wrap; margin-top: 1rem;">
-            <button id="uploadBtn" class="btn-primary"><i class="fas fa-upload"></i> Subir a Cloudinary</button>
-            <button id="clearBtn" class="btn-secondary"><i class="fas fa-trash-alt"></i> Limpiar</button>
+            <button id="uploadBtn" class="btn-primary"><i class="fas fa-upload"></i> Ladda upp filer</button>
+            <button id="clearBtn" class="btn-secondary"><i class="fas fa-trash-alt"></i> Rensa</button>
         </div>
 
         <div id="resultContainer" class="result-link"></div>
     </div>
 
     <div class="card" id="existingFilesCard" style="display: none;">
-        <h3><i class="fas fa-history"></i> Archivos existentes para este código</h3>
+        <h3><i class="fas fa-history"></i> Befintliga filer för denna kod</h3>
         <div id="existingFilesList"></div>
     </div>
 </div>
 
-<div id="toast" class="toast">✅ Listo</div>
+<div id="toast" class="toast">✅ Klart</div>
 
 <script>
-    // ========== CONFIGURACIÓN DE FIREBASE ==========
+    // ========== FIREBASE KONFIGURATION ==========
     const firebaseConfig = {
         apiKey: "AIzaSyANa6zWkGrYQ7O7M6XT2oYbArsZIcs36M8",
         authDomain: "trip-a9341.firebaseapp.com",
@@ -131,30 +126,21 @@
         appId: "1:379336201132:web:ebeadba357d17635aba009",
         measurementId: "G-JPR9HGQTMJ"
     };
-    
-    // Inicializar Firebase
     firebase.initializeApp(firebaseConfig);
     const database = firebase.database();
-    console.log("✅ Firebase inicializado correctamente");
-    // ================================================
+    console.log("✅ Firebase initierad");
+    // ============================================
 
-    // ========== CONFIGURACIÓN DE CLOUDINARY ==========
+    // ========== CLOUDINARY (bakgrund) ==========
     const CLOUD_NAME = "dc1zqri3o";
     const UPLOAD_PRESET = "ncc_nordic";
     const FOLDER = "underlag";
-    // =================================================
+    // ============================================
 
-    // 🔧 Función para sanitizar códigos para Firebase (reemplaza . por -)
     function sanitizeCodeForFirebase(code) {
         return code.replace(/\./g, '-').replace(/[#$\[\]]/g, '_');
     }
 
-    // Función para mostrar el código original (con puntos)
-    function displayOriginalCode(sanitizedCode) {
-        return sanitizedCode.replace(/-/g, '.');
-    }
-
-    // Elementos del DOM
     const codeInput = document.getElementById('codeInput');
     const descriptionInput = document.getElementById('descriptionInput');
     const dropzone = document.getElementById('dropzone');
@@ -188,19 +174,17 @@
 
     function renderFileList() {
         if (selectedFiles.length === 0) {
-            fileListContainer.innerHTML = '<div style="text-align:center; color:#9bb3c9; padding:1rem;"><i class="fas fa-inbox"></i> No hay archivos seleccionados</div>';
+            fileListContainer.innerHTML = '<div style="text-align:center; color:#9bb3c9; padding:1rem;"><i class="fas fa-inbox"></i> Inga filer valda</div>';
             return;
         }
-
         fileListContainer.innerHTML = selectedFiles.map((file, index) => `
             <div class="file-item">
                 <i class="fas ${getFileIcon(file.name)}"></i>
                 <span class="file-name">${escapeHtml(file.name)}</span>
                 <span class="file-size">${formatSize(file.size)}</span>
-                <button class="remove-file" data-index="${index}"><i class="fas fa-times"></i> Eliminar</button>
+                <button class="remove-file" data-index="${index}"><i class="fas fa-times"></i> Ta bort</button>
             </div>
         `).join('');
-
         document.querySelectorAll('.remove-file').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 const index = parseInt(btn.dataset.index);
@@ -227,27 +211,23 @@
         return str.replace(/[&<>]/g, m => m === '&' ? '&amp;' : m === '<' ? '&lt;' : '&gt;');
     }
 
-    // Subir un archivo a Cloudinary
     async function uploadFileToCloudinary(file, codeOriginal) {
         const formData = new FormData();
         const timestamp = Date.now();
         const safeName = file.name.replace(/[^a-zA-Z0-9åäöÅÄÖ.\-]/g, '_');
         const publicId = `${FOLDER}/${codeOriginal}/${timestamp}_${safeName}`;
-        
         formData.append('file', file);
         formData.append('upload_preset', UPLOAD_PRESET);
         formData.append('folder', `${FOLDER}/${codeOriginal}`);
         formData.append('public_id', publicId);
         formData.append('resource_type', 'auto');
-
         try {
             const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD_NAME}/auto/upload`, {
                 method: 'POST',
                 body: formData
             });
             const data = await res.json();
-            if (!res.ok) throw new Error(data.error?.message || 'Error al subir');
-            
+            if (!res.ok) throw new Error(data.error?.message || 'Uppladdning misslyckades');
             const downloadUrl = data.secure_url + (data.secure_url.includes('?') ? '&fl_attachment' : '?fl_attachment');
             return {
                 success: true,
@@ -265,14 +245,11 @@
         }
     }
 
-    // Guardar en Firebase (usando código sanitizado)
     async function saveToFirebase(codeOriginal, description, files) {
         const codeSanitized = sanitizeCodeForFirebase(codeOriginal);
         const codeRef = database.ref(`underlag/${codeSanitized}`);
-        
         const snapshot = await codeRef.once('value');
         let existingData = snapshot.val() || {};
-        
         const filesObj = {};
         files.forEach((file, index) => {
             const fileId = `${Date.now()}_${index}_${file.filename.replace(/[^a-zA-Z0-9]/g, '_')}`;
@@ -286,10 +263,8 @@
                 originalCode: codeOriginal
             };
         });
-        
         const existingFiles = existingData.files || {};
         const allFiles = { ...existingFiles, ...filesObj };
-        
         await codeRef.set({
             description: description || existingData.description || '',
             originalCode: codeOriginal,
@@ -297,39 +272,29 @@
             updatedAt: new Date().toISOString(),
             files: allFiles
         });
-        
-        console.log(`✅ Datos guardados en Firebase para código: ${codeOriginal} -> ${codeSanitized}`);
         return true;
     }
 
-    // Cargar archivos existentes desde Firebase
     async function loadExistingFiles(codeOriginal) {
         try {
             const codeSanitized = sanitizeCodeForFirebase(codeOriginal);
             const snapshot = await database.ref(`underlag/${codeSanitized}`).once('value');
-            const data = snapshot.val();
-            return data || null;
+            return snapshot.val() || null;
         } catch (error) {
-            console.error('Error loading from Firebase:', error);
+            console.error('Fel vid laddning:', error);
             return null;
         }
     }
 
     async function displayExistingFiles(codeOriginal) {
         const data = await loadExistingFiles(codeOriginal);
-        
         if (!data || !data.files || Object.keys(data.files).length === 0) {
             existingFilesCard.style.display = 'none';
             return;
         }
-        
         existingFilesCard.style.display = 'block';
-        
         let html = '';
-        if (data.description) {
-            html += `<p><strong>Descripción:</strong> ${escapeHtml(data.description)}</p>`;
-        }
-        
+        if (data.description) html += `<p><strong>Beskrivning:</strong> ${escapeHtml(data.description)}</p>`;
         html += `<div style="margin-top: 1rem;">`;
         const filesArray = Object.values(data.files);
         for (const file of filesArray) {
@@ -339,8 +304,8 @@
                     <span class="file-name">${escapeHtml(file.filename)}</span>
                     <span class="file-size">${formatSize(file.size)}</span>
                     <div style="display: flex; gap: 0.3rem;">
-                        <button class="btn-secondary" style="padding: 0.2rem 0.6rem; font-size:0.7rem;" onclick="window.open('${file.previewUrl}', '_blank')"><i class="fas fa-eye"></i> Ver</button>
-                        <button class="btn-secondary" style="padding: 0.2rem 0.6rem; font-size:0.7rem;" onclick="window.open('${file.downloadUrl}', '_blank')"><i class="fas fa-download"></i> Descargar</button>
+                        <button class="btn-secondary" style="padding: 0.2rem 0.6rem; font-size:0.7rem;" onclick="window.open('${file.previewUrl}', '_blank')"><i class="fas fa-eye"></i> Visa</button>
+                        <button class="btn-secondary" style="padding: 0.2rem 0.6rem; font-size:0.7rem;" onclick="window.open('${file.downloadUrl}', '_blank')"><i class="fas fa-download"></i> Ladda ner</button>
                     </div>
                 </div>
             `;
@@ -351,116 +316,65 @@
 
     async function uploadFiles() {
         const codeOriginal = codeInput.value.trim().toUpperCase();
-        
-        if (!codeOriginal) {
-            showToast('❌ Ingresa un código (ej: CBB.32)', true);
-            return;
-        }
-        
-        if (selectedFiles.length === 0) {
-            showToast('❌ Selecciona al menos un archivo', true);
-            return;
-        }
-        
+        if (!codeOriginal) { showToast('❌ Ange en kod (t.ex. CBB.32)', true); return; }
+        if (selectedFiles.length === 0) { showToast('❌ Välj minst en fil', true); return; }
         uploadBtn.disabled = true;
         progressBar.style.display = 'block';
         progressFill.style.width = '0%';
-        
         let completed = 0;
         const total = selectedFiles.length;
         const uploadedFiles = [];
-        
-        showToast(`📤 Subiendo ${total} archivo(s) a Cloudinary...`);
-        
+        showToast(`📤 Laddar upp ${total} fil(er)...`);
         for (let i = 0; i < selectedFiles.length; i++) {
             const result = await uploadFileToCloudinary(selectedFiles[i], codeOriginal);
-            
             if (result.success) {
                 uploadedFiles.push(result);
-                console.log(`✅ Subido: ${result.filename}`);
+                console.log(`✅ Uppladdad: ${result.filename}`);
             } else {
-                showToast(`❌ Error: ${result.name}`, true);
+                showToast(`❌ Misslyckades: ${result.name}`, true);
             }
-            
             completed++;
             progressFill.style.width = `${(completed/total)*100}%`;
         }
-        
         if (uploadedFiles.length > 0) {
-            showToast(`📝 Guardando en Firebase...`);
-            
+            showToast(`📝 Sparar i Firebase...`);
             const description = descriptionInput.value.trim();
             await saveToFirebase(codeOriginal, description, uploadedFiles);
-            
-            // 🔗 GENERAR EL ENLACE CORREGIDO 🔗
             let baseUrl = window.location.href;
-            
-            // Si la URL actual contiene index.html, la reemplazamos
-            if (baseUrl.includes('index.html')) {
-                baseUrl = baseUrl.replace('index.html', '');
-            }
-            // Eliminar el código de la URL si existe (?code=...)
-            if (baseUrl.includes('?code=')) {
-                baseUrl = baseUrl.split('?')[0];
-            }
-            // Asegurar que termina con /
+            if (baseUrl.includes('index.html')) baseUrl = baseUrl.replace('index.html', '');
+            if (baseUrl.includes('?code=')) baseUrl = baseUrl.split('?')[0];
             if (!baseUrl.endsWith('/')) {
-                if (baseUrl.lastIndexOf('/') > baseUrl.indexOf('://') + 2) {
-                    baseUrl = baseUrl.substring(0, baseUrl.lastIndexOf('/') + 1);
-                } else {
-                    baseUrl = baseUrl + '/';
-                }
+                if (baseUrl.lastIndexOf('/') > baseUrl.indexOf('://') + 2) baseUrl = baseUrl.substring(0, baseUrl.lastIndexOf('/') + 1);
+                else baseUrl = baseUrl + '/';
             }
-            
-            const ENLACE_PARA_USUARIO = `${baseUrl}viewer.html?code=${encodeURIComponent(codeOriginal)}`;
-            console.log('🔗 Enlace generado:', ENLACE_PARA_USUARIO);
-            
+            const ENLACE = `${baseUrl}viewer.html?code=${encodeURIComponent(codeOriginal)}`;
             resultContainer.style.display = 'block';
             resultContainer.innerHTML = `
-                <h4><i class="fas fa-check-circle" style="color:#10b981;"></i> ¡Archivos subidos correctamente!</h4>
-                <p>📁 ${uploadedFiles.length} archivo(s) subido(s) a Cloudinary y registrados en Firebase</p>
-                <p>📌 Código original: <strong class="code-badge">${escapeHtml(codeOriginal)}</strong></p>
-                
-                <hr style="margin: 1rem 0; border-color:#cbdde9;">
-                
-                <p><strong style="color:#2c7cb6; font-size:1rem;">🔗 ENLACE PARA COPIAR EN EXCEL/PDF:</strong></p>
-                
+                <h4><i class="fas fa-check-circle" style="color:#10b981;"></i> Filer uppladdade!</h4>
+                <p>📁 ${uploadedFiles.length} fil(er) uppladdade för kod <strong class="code-badge">${escapeHtml(codeOriginal)}</strong></p>
+                <hr style="margin: 1rem 0;">
+                <p><strong style="color:#2c7cb6;">🔗 LÄNK ATT KLISTRA IN I EXCEL/PDF:</strong></p>
                 <div style="background:#f0f6fc; padding:1rem; border-radius:1rem; margin:0.5rem 0;">
-                    <code style="word-break: break-all; font-size:0.9rem;">${ENLACE_PARA_USUARIO}</code>
+                    <code style="word-break: break-all; font-size:0.9rem;">${ENLACE}</code>
                 </div>
-                
-                <input type="text" id="linkInput" value="${ENLACE_PARA_USUARIO}" readonly style="width:100%; padding:0.8rem; border-radius:0.8rem; border:2px solid #cbdde9; margin:0.5rem 0; font-family: monospace; font-size:0.9rem; background:white;">
-                
-                <div style="display: flex; gap: 0.5rem; margin-top: 0.5rem; flex-wrap: wrap;">
-                    <button id="copyLinkBtn" class="btn-primary"><i class="fas fa-copy"></i> Copiar enlace</button>
-                    <a href="${ENLACE_PARA_USUARIO}" target="_blank" class="btn-secondary" style="text-decoration:none;"><i class="fas fa-external-link-alt"></i> Probar enlace</a>
+                <input type="text" id="linkInput" value="${ENLACE}" readonly style="width:100%; padding:0.8rem; border-radius:0.8rem; border:2px solid #cbdde9; margin:0.5rem 0; font-family: monospace; background:white;">
+                <div style="display: flex; gap: 0.5rem; margin-top: 0.5rem;">
+                    <button id="copyLinkBtn" class="btn-primary"><i class="fas fa-copy"></i> Kopiera länk</button>
+                    <a href="${ENLACE}" target="_blank" class="btn-secondary" style="text-decoration:none;"><i class="fas fa-external-link-alt"></i> Testa länk</a>
                 </div>
-                
-                <hr style="margin: 1rem 0; border-color:#cbdde9;">
-                
-                <p style="font-size:0.85rem; color:#6c8dab;">
-                    <i class="fas fa-info-circle"></i> 
-                    <strong>Instrucciones:</strong> Copia este enlace y pégalo en tu tabla Excel o PDF.
-                    Los usuarios harán clic y verán todos los archivos.
-                </p>
             `;
-            
             document.getElementById('copyLinkBtn')?.addEventListener('click', () => {
                 const linkInput = document.getElementById('linkInput');
                 linkInput.select();
                 document.execCommand('copy');
-                showToast('📋 Enlace copiado al portapapeles');
+                showToast('📋 Länk kopierad');
             });
-            
-            showToast(`✅ ${uploadedFiles.length} archivo(s) subidos correctamente`);
+            showToast(`✅ ${uploadedFiles.length} fil(er) uppladdade`);
         } else {
-            showToast('❌ No se pudo subir ningún archivo', true);
+            showToast('❌ Inga filer kunde laddas upp', true);
         }
-        
-        // Limpiar selección de archivos
         selectedFiles = [];
         renderFileList();
-        
         uploadBtn.disabled = false;
         setTimeout(() => {
             progressBar.style.display = 'none';
@@ -472,58 +386,39 @@
         selectedFiles = [];
         renderFileList();
         fileInput.value = '';
-        showToast('🧹 Lista limpiada');
+        showToast('🧹 Rensat');
     }
 
-    // Cargar archivos existentes al escribir el código
     let debounceTimer;
     codeInput.addEventListener('input', async (e) => {
         clearTimeout(debounceTimer);
-        const codeOriginal = e.target.value.trim().toUpperCase();
-        if (codeOriginal.length >= 3) {
-            debounceTimer = setTimeout(async () => {
-                await displayExistingFiles(codeOriginal);
-            }, 500);
+        const code = e.target.value.trim().toUpperCase();
+        if (code.length >= 3) {
+            debounceTimer = setTimeout(async () => await displayExistingFiles(code), 500);
         } else {
             existingFilesCard.style.display = 'none';
         }
     });
 
-    // Event listeners del dropzone
-    dropzone.addEventListener('dragover', e => {
-        e.preventDefault();
-        dropzone.classList.add('drag-over');
-    });
-    
-    dropzone.addEventListener('dragleave', () => {
-        dropzone.classList.remove('drag-over');
-    });
-    
+    dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('drag-over'); });
+    dropzone.addEventListener('dragleave', () => dropzone.classList.remove('drag-over'));
     dropzone.addEventListener('drop', e => {
         e.preventDefault();
         dropzone.classList.remove('drag-over');
-        const files = Array.from(e.dataTransfer.files);
-        selectedFiles.push(...files);
+        selectedFiles.push(...Array.from(e.dataTransfer.files));
         renderFileList();
     });
-    
-    dropzone.addEventListener('click', () => {
-        fileInput.click();
-    });
-    
+    dropzone.addEventListener('click', () => fileInput.click());
     fileInput.addEventListener('change', e => {
-        const files = Array.from(e.target.files);
-        selectedFiles.push(...files);
+        selectedFiles.push(...Array.from(e.target.files));
         renderFileList();
         fileInput.value = '';
     });
-    
     uploadBtn.addEventListener('click', uploadFiles);
     clearBtn.addEventListener('click', clearAll);
-    
-    // Inicializar
+
     renderFileList();
-    console.log("✅ Admin panel listo - Firebase conectado");
+    console.log("✅ Admin redo – Firebase ansluten");
 </script>
 </body>
 </html>
